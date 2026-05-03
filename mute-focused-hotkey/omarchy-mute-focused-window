@@ -1,0 +1,66 @@
+#!/bin/bash
+# Toggle mute on PulseAudio/PipeWire audio streams belonging to the focused Hyprland window.
+
+# Get focused window PID
+WINDOW_PID=$(hyprctl activewindow -j | python3 -c "import json,sys; print(json.load(sys.stdin).get('pid',''))" 2>/dev/null)
+
+if [[ -z "$WINDOW_PID" || "$WINDOW_PID" == "None" ]]; then
+  notify-send -t 2000 "Mute Window" "No focused window found"
+  exit 1
+fi
+
+# Collect the PID and all descendant PIDs (handles Wine/Proton child processes)
+collect_descendants() {
+  local pid=$1
+  echo "$pid"
+  for child in $(cat /proc/"$pid"/task/*/children 2>/dev/null | tr ' ' '\n' | sort -u); do
+    collect_descendants "$child"
+  done
+}
+
+PIDS=$(collect_descendants "$WINDOW_PID" | sort -u)
+
+# Find all sink-inputs matching any of those PIDs and toggle mute
+FOUND=0
+MUTE_STATE=""
+
+while IFS= read -r line; do
+  if [[ "$line" =~ ^"Sink Input #"([0-9]+) ]]; then
+    IDX="${BASH_REMATCH[1]}"
+    CURRENT_PID=""
+    CURRENT_MUTE=""
+  fi
+  if [[ "$line" =~ application.process.id.*\"([0-9]+)\" ]]; then
+    CURRENT_PID="${BASH_REMATCH[1]}"
+  fi
+  if [[ "$line" =~ ^[[:space:]]*Mute:[[:space:]]*(yes|no) ]]; then
+    CURRENT_MUTE="${BASH_REMATCH[1]}"
+  fi
+  # When we hit the next entry or EOF-like boundary, check if this input matched
+  if [[ -n "$CURRENT_PID" && -n "$IDX" ]]; then
+    if echo "$PIDS" | grep -qw "$CURRENT_PID"; then
+      pactl set-sink-input-mute "$IDX" toggle
+      FOUND=$((FOUND + 1))
+      # Capture what the new state will be
+      if [[ "$CURRENT_MUTE" == "no" ]]; then
+        MUTE_STATE="muted"
+      else
+        MUTE_STATE="unmuted"
+      fi
+      # Reset to avoid re-matching this entry
+      CURRENT_PID=""
+      IDX=""
+    fi
+  fi
+done < <(pactl list sink-inputs 2>/dev/null)
+
+WINDOW_TITLE=$(hyprctl activewindow -j | python3 -c "import json,sys; print(json.load(sys.stdin).get('title','')[:40])" 2>/dev/null)
+
+if [[ "$FOUND" -eq 0 ]]; then
+  notify-send -t 2000 "Mute Window" "No audio stream for: ${WINDOW_TITLE:-unknown}"
+else
+  ICON="audio-volume-muted"
+  [[ "$MUTE_STATE" == "unmuted" ]] && ICON="audio-volume-high"
+  notify-send -t 2000 -i "$ICON" "Mute Window" "${WINDOW_TITLE:-Window} ${MUTE_STATE} (${FOUND} stream(s))"
+fi
+
