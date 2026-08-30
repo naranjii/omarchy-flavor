@@ -1,6 +1,6 @@
 # omarship-powerline-themes
 
-Theme-aware Starship powerline prompt for Omarchy users.
+Theme-aware Starship powerline prompt for **all Omarchy users**. Automatically detects and extracts colors from any Omarchy theme using multiple fallback sources for maximum compatibility.
 
 This project installs a Starship template into Omarchy's user template directory and links `~/.config/starship.toml` to Omarchy's active theme output, so prompts follow the current Omarchy theme automatically.
 
@@ -56,6 +56,17 @@ Optional flags:
 2. Omarchy renders templates from `~/.config/omarchy/themed/*.tpl` into `~/.config/omarchy/current/theme/*`.
 3. `~/.config/starship.toml` points to `~/.config/omarchy/current/theme/starship.toml`.
 4. Starship prompt updates with the new theme palette.
+
+## Color Source Priority
+
+The script automatically detects and extracts colors from Omarchy themes using a fallback hierarchy:
+
+1. **`custom_theme.json`** (highest priority) - Direct color definitions from theme metadata
+2. **`alacritty.toml`** (medium priority) - Colors extracted from Alacritty terminal configuration  
+3. **Fallback colors** (lowest priority) - Default Dracula-inspired color palette when no theme colors are found
+4. **Neutral config** (failsafe) - Clean minimal prompt when color extraction fails
+
+This ensures compatibility with all Omarchy themes, whether they have modern `custom_theme.json` files, legacy `alacritty.toml` configurations, or minimal color definitions.
 
 ## Safety and scope
 
